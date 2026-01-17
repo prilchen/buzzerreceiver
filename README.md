@@ -4,6 +4,8 @@ Dieses Projekt ist das Herzstück eines kabellosen Quiz-Buzzer-Systems. Die Zent
 
 Das vollständige Tutorial mit Gehäusedaten und Bauanleitung findest du auf [[prilchen.de](https://prilchen.de/esp32-projekt-quiz-buzzer-wer-drueckt-als-erster)
 
+![Projektbild](https://prilchen.de/wp-content/uploads/2026/01/image-6.png)
+
 ## 🚀 Highlights
 - **Funkprotokoll:** Nutzt ESP-NOW (kein WLAN-Router erforderlich, extrem schnell).
 - **Energiemanagement:** Wechselt nach 5 Minuten Inaktivität in den **Deep Sleep** (Tiefschlaf).
