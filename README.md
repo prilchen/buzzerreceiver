@@ -2,7 +2,7 @@
 
 Dieses Projekt ist das Herzstück eines kabellosen Quiz-Buzzer-Systems. Die Zentrale empfängt Signale von mehreren Sendern (Buzzern) via **ESP-NOW** und zeigt den schnellsten Spieler per LED an.
 
-Das vollständige Tutorial mit Gehäusedaten und Bauanleitung findest du auf [[prilchen.de](https://prilchen.de/esp32-projekt-quiz-buzzer-wer-drueckt-als-erster)
+Das vollständige Tutorial mit Gehäusedaten und Bauanleitung findest du auf [prilchen.de](https://prilchen.de/esp32-projekt-quiz-buzzer-wer-drueckt-als-erster)
 
 ![Projektbild](https://prilchen.de/wp-content/uploads/2026/01/image-6.png)
 
