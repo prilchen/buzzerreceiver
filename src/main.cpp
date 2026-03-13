@@ -1,13 +1,12 @@
 #include <Arduino.h>
 #include <esp_now.h>
 #include <WiFi.h>
+#include "esp_bt.h"
+#include "driver/rtc_io.h"
 
 // --- DEBUG MODUS ---
-// 1 = Serielle Ausgabe an (Entwicklung)
-// 0 = Serielle Ausgabe aus (Normalbetrieb / Stromsparen)
 #define DEBUG 0
 
-// Makro für die serielle Ausgabe
 #if DEBUG == 1
   #define DEBUG_PRINT(x) Serial.print(x)
   #define DEBUG_PRINTLN(x) Serial.println(x)
@@ -21,42 +20,36 @@
 #endif
 
 // --- Konfiguration ---
-const int ledPins[] = {12, 13, 14, 25, 26, 27}; 
+const int ledPins[] = {12, 13, 14, 25, 26, 27};
 const int numLeds = 6;
-const int buttonPin = 15; 
+const int buttonPin = 15;
 
-const unsigned long SLEEP_TIMEOUT = 300000; 
+const unsigned long SLEEP_TIMEOUT = 300000;
 unsigned long lastActivity = 0;
 
 enum BuzzerState { STATE_WAITING, STATE_WINNER_LOCKED };
 BuzzerState currentState = STATE_WAITING;
 
 typedef struct struct_message {
-    int playerID; 
+    int playerID;
 } struct_message;
 
 struct_message incomingData;
 
+// --- Hilfsfunktionen ---
 void allLedsOff() {
-    for (int i = 0; i < numLeds; i++) digitalWrite(ledPins[i], LOW);
+    for (int i = 0; i < numLeds; i++) {
+        digitalWrite(ledPins[i], LOW);
+    }
 }
 
-void enterDeepSleep() {
-    DEBUG_PRINTLN("Inaktivität erkannt. Gehe in Deep Sleep...");
-    allLedsOff();
-    esp_sleep_enable_ext0_wakeup((gpio_num_t)buttonPin, 0); 
-    esp_deep_sleep_start();
-}
-
-// Hier trägst du später die MAC-Adressen deiner eigenen Buzzer ein.
-// Wie du diese Adressen ausliest, siehe prilchen.de
 const uint8_t playerMacs[][6] = {
-    {0xAA, 0xBB, 0xCC, 0x01, 0x01, 0x01}, // Beispiel Spieler 1
-    {0xAA, 0xBB, 0xCC, 0x02, 0x02, 0x02}, // Beispiel Spieler 2
-    {0xAA, 0xBB, 0xCC, 0x03, 0x03, 0x03}, // Beispiel Spieler 3
-    {0xAA, 0xBB, 0xCC, 0x04, 0x04, 0x04}, // Beispiel Spieler 4
-    {0xAA, 0xBB, 0xCC, 0x05, 0x05, 0x05}, // Beispiel Spieler 5
-    {0xAA, 0xBB, 0xCC, 0x06, 0x06, 0x06}  // Beispiel Spieler 6
+    {0xFC, 0xE8, 0xC0, 0xE1, 0xF5, 0x0C}, // Spieler 1
+    {0xFC, 0xE8, 0xC0, 0xDE, 0xB1, 0xE4}, // Spieler 2
+    {0xF8, 0xB3, 0xB7, 0x74, 0xDE, 0xD4}, // Spieler 3
+    {0x38, 0x18, 0x2B, 0xA7, 0x7F, 0x58}, // Spieler 4
+    {0x38, 0x18, 0x2B, 0xA7, 0x7F, 0x20}, // Spieler 5
+    {0xFC, 0xE8, 0xC0, 0xDF, 0x97, 0xA8}  // Spieler 6
 };
 const int numPlayers = sizeof(playerMacs) / 6;
 
@@ -67,13 +60,41 @@ int getPlayerIndex(const uint8_t * mac_addr) {
     return -1;
 }
 
+// --- Deep Sleep ---
+void enterDeepSleep() {
+    DEBUG_PRINTLN("Inaktivität erkannt. Gehe in Deep Sleep...");
+
+    allLedsOff();
+
+    // LED-Pins stromsparend setzen
+    for (int i = 0; i < numLeds; i++) {
+        pinMode(ledPins[i], INPUT);
+    }
+
+    // ESP-NOW & WiFi deaktivieren
+    esp_now_deinit();
+    WiFi.mode(WIFI_OFF);
+
+    // Bluetooth deaktivieren (spart zusätzlich)
+    btStop();
+
+    // Optional: Brownout-Detector deaktivieren (spart 5–10 µA)
+    // WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+
+    // Wakeup durch Button (LOW)
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)buttonPin, 0);
+
+    esp_deep_sleep_start();
+}
+
+// --- ESP-NOW Callback ---
 void OnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incomingBytes, int len) {
-    lastActivity = millis(); 
-    
+    lastActivity = millis();
+
     if (currentState == STATE_WAITING) {
         const uint8_t *mac = esp_now_info->src_addr;
         int winnerIdx = getPlayerIndex(mac);
-        
+
         if (winnerIdx >= 0 && winnerIdx < numLeds) {
             allLedsOff();
             digitalWrite(ledPins[winnerIdx], HIGH);
@@ -83,9 +104,10 @@ void OnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incoming
     }
 }
 
+// --- Setup ---
 void setup() {
     DEBUG_BEGIN(115200);
-    
+
     // LEDs & Button initialisieren
     for (int i = 0; i < numLeds; i++) {
         pinMode(ledPins[i], OUTPUT);
@@ -93,15 +115,12 @@ void setup() {
     pinMode(buttonPin, INPUT_PULLUP);
     allLedsOff();
 
-    // --- LED-Selbsttest beim Start / Aufwachen ---
-    // Jede LED leuchtet kurz nacheinander auf (Lauflicht)
-    DEBUG_PRINTLN("Starte LED-Selbsttest...");
+    // LED-Selbsttest
     for (int i = 0; i < numLeds; i++) {
         digitalWrite(ledPins[i], HIGH);
-        delay(500);
+        delay(200);
         digitalWrite(ledPins[i], LOW);
     }
-    DEBUG_PRINTLN("Test beendet.");
 
     // WiFi & ESP-NOW Initialisierung
     WiFi.mode(WIFI_STA);
@@ -111,21 +130,20 @@ void setup() {
     }
 
     esp_now_register_recv_cb(OnDataRecv);
-    DEBUG_PRINTLN("Zentrale bereit. Warte auf Buzzer...");
-    
-    lastActivity = millis(); 
+
+    lastActivity = millis();
 }
 
+// --- Loop ---
 void loop() {
     if (digitalRead(buttonPin) == LOW) {
-        lastActivity = millis(); 
-        
+        lastActivity = millis();
+
         if (currentState == STATE_WINNER_LOCKED) {
             delay(50);
             allLedsOff();
             currentState = STATE_WAITING;
-            DEBUG_PRINTLN("System Reset - Nächste Runde!");
-            while(digitalRead(buttonPin) == LOW); 
+            while (digitalRead(buttonPin) == LOW);
         }
     }
 
